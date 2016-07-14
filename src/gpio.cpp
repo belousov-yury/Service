@@ -14,15 +14,6 @@ void GPIO::setPinSignal(int value)
 {
     pinSignal = value;
 }
-int GPIO::getPinGround() const
-{
-    return pinGround;
-}
-
-void GPIO::setPinGround(int value)
-{
-    pinGround = value;
-}
 bool GPIO::getMode() const
 {
     return mode;

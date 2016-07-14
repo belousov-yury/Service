@@ -14,9 +14,6 @@ public:
     int getPinSignal() const;
     void setPinSignal(int value);
 
-    int getPinGround() const;
-    void setPinGround(int value);
-
     bool getMode() const;
     void setMode(bool value);
 
@@ -36,8 +33,15 @@ private:
     int         idGPIO;
     int         idDevice;
     int         pinSignal;
-    int         pinGround;
-    bool        mode;//true -> in, false -> out
+    int         mode;// = >
+// = >00 - вывод незадействован
+//    01 - датчик дыма с нормально-замкнутыми контактами
+//    02 - датчик дыма с нормально-разомкнутыми контактами
+//    02 - датчик протечки воды
+//    03 - импульсный счётчик воды
+//    03 - импульсный счётчик газа
+//    03 - импульсный счётчик электричества
+//    04 - термометр
     QString     deviceName;
 
 };

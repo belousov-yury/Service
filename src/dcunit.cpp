@@ -3,10 +3,12 @@
 DCunit::DCunit(QObject *parent) :
     QObject(parent)
 {
+    status = true;
+    device = new Device(this);
     nmObj = new NetworkManager (9090,"localhost");
     modBus = new ModBus;
 
-    connect(nmObj,SIGNAL(sendToDC(QByteArray)),this,SLOT(readToNM(QByteArray)));
+    connect(nmObj,SIGNAL(sendToDC(QByteArray)),device,SLOT(readToNM(QByteArray)));
     connect(this,SIGNAL(sendToNM(QByteArray)),nmObj,SLOT(readToDC(QByteArray)));
     //------
 
@@ -14,18 +16,48 @@ DCunit::DCunit(QObject *parent) :
     connect(modBus,SIGNAL(sendToDC(ModBus::modBusDataStruct)),this,SLOT(readToModBus(ModBus::modBusDataStruct)));
 
 }
-void DCunit::readToModBus(ModBus::modBusDataStruct data)//парсер ответов модема, т.е. что ответил модем
-{
 
-    switch (data.typeFrame) {
-    case 0x00://pData
-        dataType(data);
+void DCunit::readToNM(QByteArray data)//прием данных от калсса NetworkManager
+{
+    QJsonDocument doc  = QJsonDocument::fromJson(data) ;
+    QJsonObject obj = doc.object();
+
+    int command = obj.value("Command").toInt();
+    switch (command) {
+    case 100://добавить устройство(Slave-modem)
+        status = false;
+        device->addDevice(obj.value("idDevice").toInt(),obj.value("interfaceNumber").toInt());
         break;
-    case 0x01://pResponse
-        responseType(data);
+    case 101://добавить датчик или счетчик к устройству(Slave-modem)
+
+        break;
+    case 102://удалить устройство(Slave-modem)
+
+        break;
+    case 103://удалить датчик или счетчик с устройства(Slave-modem)
+
+        break;
+    case 104://обновить данные устройства(Slave-modem)
+
+        break;
+    case 105://обновить данные датчика или счетчика на устройстве(Slave-modem)
+
+        break;
+    default:
+        break;
+    }
+}
+void DCunit::readToModBus(ModBus::modBusDataStruct data)
+{
+    switch (data.typeFrame) {//проверка на тип кадра
+    case 0://pData
+
+        break;
+    case 1://pResponse
+
        break;
-    case 0x02://pCommand
-        commandType(data);
+    case 2://pCommand
+
         break;
     default:
         break;
@@ -35,15 +67,20 @@ void DCunit::dataType(ModBus::modBusDataStruct data)//(Кадр данных)п�
 {
 
 }
-
 void DCunit::responseType(ModBus::modBusDataStruct data)//(Кадр подтверждение)парсер ответов модема, т.е. что ответил модем. код кадра 0х01
 {
     switch (data.data[0]) {
     case 0x00://команда выполнена
         qDebug() << "command is done";
+
         break;
     case 0x01://модем проснулся
          qDebug() << "modem woke up";
+         if (data.receiver == 0)
+         {
+            device->initConfirmation();
+            status = true;
+         }
         break;
     case 0xCC://подтверждение ухода в режим сна //этот ответ не нужен, он повторяет код 0х00 (примечание Антона)
         qDebug() << "modem asleep";
@@ -64,7 +101,7 @@ void DCunit::responseType(ModBus::modBusDataStruct data)//(Кадр подтве
 
 void DCunit::commandType(ModBus::modBusDataStruct data)//(Кадр команды)парсер ответов модема, т.е. что ответил модем. код кадра 0х01
 {
-    switch (data.typeFrame) {
+    switch (data.data[0]) {
     case 0x01://задать конфигурацию входов модема - задаются сразу все 8 входов.
         {
         }
@@ -120,185 +157,72 @@ void DCunit::commandType(ModBus::modBusDataStruct data)//(Кадр команд�
         break;
     }
 }
+//    switch (command) {
+//    case 1://0x01://задать конфигурацию входов модема - задаются сразу все 8 входов.
+//        {
 
-void DCunit::readToNM(QByteArray data)//прием данных от калсса NetworkManager
-{
-    ModBus::modBusDataStruct dataStruct;
-    QJsonDocument doc  = QJsonDocument::fromJson(data) ;
-    QJsonObject obj = doc.object();
+//        }
+//        break;
 
-    dataStruct.sender.append(parsingIdSenderToId4byte(obj.value("idDevice").toInt()));
-    dataStruct.receiver.append(receiverIdGeneration());
-    dataStruct.typeFrame[0] = 0x02;
+//    case 2://0x02://задать таймер "календарный"
+//        {
 
-    int command = obj.value("Command").toInt();
-    qDebug() << QString::number(command,16);
+//        }
+//        break;
 
-    switch (command) {
-    case 1://0x01://задать конфигурацию входов модема - задаются сразу все 8 входов.
-        {
-        dataStruct.data.append(0x01);
-        }
-        break;
+//    case 3://0x03://задать таймер "минутный"(max 1440)
+//        {
 
-    case 2://0x02://задать таймер "календарный"
-        {
-        dataStruct.data.append(0x02);
-        }
-        break;
 
-    case 3://0x03://задать таймер "минутный"(max 1440)
-        {
-        dataStruct.data.append(0x03);
-        dataStruct.data.append(parsingIdSenderToId4byte(obj.value("Minute").toInt()).mid(2,2));
-        }
-        break;
+//        }
+//        break;
 
-    case 4://0x04://считать текущие дату, время, период опроса
-        {
-        dataStruct.data.append(0x04);
-        }
-        break;
+//    case 4://0x04://считать текущие дату, время, период опроса
+//        {
 
-    case 5://0x05://считать серийный номер CC1310 (номер модема)
-        {
-        dataStruct.data.append(0x05);
-        }
-        break;
+//        }
+//        break;
 
-    case 6://0x06://прочитать значения всех счётчиков, состояний всех входов
-        {
-         dataStruct.data.append(0x06);
-        }
-        break;
+//    case 5://0x05://считать серийный номер CC1310 (номер модема)
+//        {
 
-    case 7://0x07://считать конфигурацию входов модема.
-        {
-        dataStruct.data.append(0x07);
-        }
-        break;
+//        }
+//        break;
 
-    case 8://0x08://прочитать значение температуры корпуса микросхемы и напряжение питания
-        {
-        dataStruct.data.append(0x08);
-        }
-        break;
+//    case 6://0x06://прочитать значения всех счётчиков, состояний всех входов
+//        {
 
-    case 9://0x09://обнулить значение счётчика номер N
-        {
-        dataStruct.data.append(0x09);
-        }
-        break;
+//        }
+//        break;
 
-    case 255://0xFF://Команда "уснуть"
-        {
-        dataStruct.data[0xFF];
-        }
-        break;
+//    case 7://0x07://считать конфигурацию входов модема.
+//        {
 
-    default:
-        break;
-    }
-    dataStruct.data.append(fillingFieldData(dataStruct.data.size()));
-    emit sendToModBus(dataStruct);
-}
+//        }
+//        break;
 
-QByteArray DCunit::receiverIdGeneration()// функция для генерации номера id сервера, в дальнейшем доработать
-{
-    QByteArray a;
-    a[0] = 0x00;
-    a[1] = 0x00;
-    a[2] = 0x00;
-    a[3] = 0x01;
-    return a;
-}
+//    case 8://0x08://прочитать значение температуры корпуса микросхемы и напряжение питания
+//        {
 
-QByteArray DCunit::parsingIdSenderToId4byte(int id)//парсинг id из int в 4 байта
-{
-    QByteArray out;
-    QDataStream stream(&out, QIODevice::WriteOnly);
-    stream << id;
-    return out;
-}
+//        }
+//        break;
 
-QByteArray DCunit::fillingFieldData(int size)//заполнение данных нулями(23 байта поле, но не всегда оно заполнено данными)
-{
-    QByteArray out;
- for(int i = 0; i < 23 - size; i ++ )
- {
-     out[i] = 0x00;
- }
- return out;
-}
-//-----------------------------------------------------
-void DCunit::addDevice(int idDevice, int interfaceNumber)//добавить девайс(Slave-модем)
-{
-    Device *device = new Device(this);
-    device->setIdDevice(idDevice);
-    device->setInterfaceNumber(interfaceNumber);
-    deviceList->append(device);
-    qDebug()<< "addDevice "<< idDevice;
-}
+//    case 9://0x09://обнулить значение счётчика номер N
+//        {
 
-void DCunit::addChild(int idDevice, int idGPIO, int pinSignal,int pinGround, bool mode, QString deviceName)//добавить датчик или счетчик
-{
-    GPIO *gpioObj = new GPIO(this);
-    gpioObj->setIdDevice(idDevice);
-    gpioObj->setIdGPIO(idGPIO);
-    gpioObj->setPinSignal(pinSignal);
-    gpioObj->setPinGround(pinGround);
-    gpioObj->setMode(mode);
-    gpioObj->setDeviceName(deviceName);
-    gpioList->append(gpioObj);
-    qDebug()<< "addChild" << idGPIO;
+//        }
+//        break;
 
-}
-void DCunit::deleteDevice(int idDevice)//удалить
-{
-    int i = 0;
-    while( deviceList->at(i)->getIdDevice() !=  idDevice)
-    {
-        i++;
-    }
-    deviceList->at(i)->deleteLater();
-    deviceList->removeAt(i);
-}
+//    case 255://0xFF://Команда "уснуть"
+//        {
 
-void DCunit::deleteChild(int idDevice, int idGPIO)//удалить
-{
-    int i = 0;
-    while( gpioList->at(i)->getIdDevice() !=  idDevice && gpioList->at(i)->getIdGPIO() !=  idGPIO )
-    {
-        i++;
-    }
-    gpioList->at(i)->deleteLater();
-    gpioList->removeAt(i);
-}
-void DCunit::updateDevice(int idDevice, int interfaceNumber)
-{
-    int i = 0;
-    while( deviceList->at(i)->getIdDevice() !=  idDevice)
-    {
-        i++;
-    }
-     deviceList->at(i)->setIdDevice(idDevice);
-     deviceList->at(i)->setInterfaceNumber(interfaceNumber);
-     qDebug()<<"updateDevice id = " << idDevice << "is done";
-}
+//        }
+//        break;
 
-void DCunit::updateChild(int idDevice, int idGPIO, int pinSignal, int pinGround, bool mode, QString deviceName)
-{
-    int i = 0;
-    while( gpioList->at(i)->getIdDevice() !=  idDevice && gpioList->at(i)->getIdGPIO() !=  idGPIO )
-    {
-        i++;
-    }
-    gpioList->at(i)->setIdDevice(idDevice);
-    gpioList->at(i)->setIdGPIO(idGPIO);
-    gpioList->at(i)->setPinSignal(pinSignal);
-    gpioList->at(i)->setPinGround(pinGround);
-    gpioList->at(i)->setMode(mode);
-    gpioList->at(i)->setDeviceName(deviceName);
-    qDebug()<<"updateChild id = " << idGPIO << "is done";
-}
-//-----------------------------------------------------------
+//    default:
+//        break;
+//    }
+
+//    emit sendToModBus();
+
+

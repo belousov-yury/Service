@@ -22,28 +22,57 @@ void ModBus::readToDC(ModBus::modBusDataStruct data)
 
 void ModBus::parsingToData(QByteArray data)
 {//проверка crc
-    modBusDataObj.sender = data.mid(0,4).toInt();
-    modBusDataObj.receiver = data.mid(4,4).toInt();
-    modBusDataObj.typeFrame = data.mid(8,1).toInt();
-    modBusDataObj.data.append(data.mid(9,22));
-    //crc.append(data.right(1));
-//    if(modBusDataObj.crc == ControlSum(data.left(31)))
+//  crc.append(data.right(1));
+//  if(crc == ControlSum(data.left(31)))
 //    {
+    modBusDataStruct modBusDataObj;
+
+    QDataStream sender(data.left(4));
+    sender >> modBusDataObj.sender;
+
+    QDataStream receiver(data.mid(4,4));
+    receiver >> modBusDataObj.receiver;
+
+    QDataStream typeFrame(data.mid(8,1));
+    typeFrame >> modBusDataObj.typeFrame;
+
+    modBusDataObj.data.append(data.mid(9,22));
+
     emit sendToDC(modBusDataObj);
+//    }
+//    else
+//    {
+//        qDebug() << "Error control sum!";
 //    }
 }
 
 void ModBus::parsingToPackege(modBusDataStruct str)
 {
     QByteArray data;
-    data.append(str.sender);
+    data.append(parsingIdSenderToId4byte(str.sender));
     data.append(str.receiver);
     data.append(str.typeFrame);
     data.append(str.data);
    // data[31] = ControlSum(data);
     emit sendUART(data);
 }
+QByteArray ModBus::parsingIdSenderToId4byte(quint32 id)//парсинг id из int в 4 байта
+{
+    QByteArray out;
+    QDataStream stream(&out, QIODevice::WriteOnly);
+    stream << id;
+    return out;
+}
 
+QByteArray ModBus::fillingFieldData(int size)//заполнение данных нулями(поле 22 байта, но оно не всегда  заполнено данными)
+{
+    QByteArray out;
+    for(int i = 0; i < 23 - size; i ++ )
+    {
+        out[i] = 0x00;
+    }
+    return out;
+}
 //QByteArray ModBus::ControlSum(QByteArray str)
 //{
 //    QByteArray crc;
